@@ -31,9 +31,9 @@ class AffineTerminatorOp;
 class FlatAffineConstraints;
 class OpBuilder;
 
-/// A utility function to check if a value is defined at the top level of a
-/// function. A value of index type defined at the top level is always a valid
-/// symbol.
+/// A utility function to check if a value is defined at the top level of an
+/// op isolated from above or an affine graybox. A value of index type defined
+/// at the top level is always a valid symbol.
 bool isTopLevelValue(Value value);
 
 /// AffineDmaStartOp starts a non-blocking DMA operation that transfers data
@@ -457,11 +457,23 @@ public:
                      SmallVectorImpl<OpFoldResult> &results);
 };
 
-/// Returns true if the given Value can be used as a dimension id.
+/// Returns true if the given Value can be used as a dimension id in the closest
+/// op that is isolated from above or an affine graybox enclosing this value's
+/// definition or block argument appearance.
 bool isValidDim(Value value);
 
-/// Returns true if the given Value can be used as a symbol.
+/// Returns true if the given Value can be used as a dimension id for an op with
+/// a region.
+bool isValidDim(Value value, Operation *opWithRegion);
+
+/// Returns true if the given value can be used as a symbol in the closest
+/// op that is isolated from above or an affine graybox op enclosing this
+/// value's definition or block argument appearance.
 bool isValidSymbol(Value value);
+
+/// Returns true if the given Value can be used as a symbol for an
+/// op with a region.
+bool isValidSymbol(Value value, Operation *opWithRegion);
 
 /// Modifies both `map` and `operands` in-place so as to:
 /// 1. drop duplicate operands

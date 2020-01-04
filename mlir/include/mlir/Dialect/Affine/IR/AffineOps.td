@@ -82,11 +82,20 @@ def AffineApplyOp : Affine_Op<"apply", [NoSideEffect]> {
     /// Returns the affine value map computed from this operation.
     AffineValueMap getAffineValueMap();
 
-    /// Returns true if the result of this operation can be used as dimension id.
+    /// Returns true if the result of this operation can be used as dimension
+    /// id.
     bool isValidDim();
+
+    /// Returns true if the result of this operation can be used as dimension id
+    /// within the region of the op 'opWithRegion'.
+    bool isValidDim(Operation *opWithRegion);
 
     /// Returns true if the result of this operation is a symbol.
     bool isValidSymbol();
+
+    /// Returns true if the result of this operation is a symbol in the region
+    /// of 'opWithRegion'.
+    bool isValidSymbol(Operation * opWithRegion);
 
     operand_range getMapOperands() { return getOperands(); }
   }];
@@ -515,6 +524,63 @@ def AffineTerminatorOp :
 
   // Fully specified by traits.
   let verifier = ?;
+}
+
+def AffineGrayBoxOp : Affine_Op<"graybox"> {
+  let summary = "graybox operation";
+  let description = [{
+      The affine graybox op introduces a new symbol context for affine
+      operations. It holds a single region,  which can be a list of one or more
+      blocks. The op's region can have zero or more arguments, each of which can
+      only be a memref. The operands bind 1:1 to its region's arguments. The op
+      can't use any memrefs defined outside of it, but can use any other SSA
+      values that dominate it. Its region's blocks can have terminators the same
+      way as current MLIR functions (FuncOp) can. Control from any return ops
+      from the top level of its region returns to right after the affine.graybox
+      op. Its control flow thus conforms to the control flow semantics of
+      regions, i.e., control always returns to the immediate enclosing (parent)
+      op. The results of a graybox op match 1:1 with the return values from its
+      region's blocks;
+
+      Ex:
+
+      affine.for %i = 0 to 128 {
+        affine.graybox [%rI, %rM] = (%I, %M)
+              : (memref<128xi32>, memref<24xf32>) -> () {
+          %idx = affine.load %rI[%i] : memref<128xi32>
+          %index = index_cast %idx : i32 to index
+          affine.load %rM[%index]: memref<24xf32>
+          return
+        }
+      }
+
+      affine.for %i = 0 to %n {
+        affine.graybox [] = () : () -> () {
+          // %pow can now be used as a loop bound.
+          %pow = call @powi(%i) : (index) ->  index
+          affine.for %j = 0 to %pow {
+            "foo"() : () -> ()
+          }
+          return
+        }
+      }
+
+  }];
+
+  let arguments =  (ins Variadic<AnyMemRef>:$operands);
+  let results = (outs Variadic<AnyType>);
+
+  let regions = (region AnyRegion:$region);
+
+  let skipDefaultBuilders = 1;
+
+  let builders = [
+    OpBuilder<"Builder *builder, OperationState &result, "
+              "ArrayRef<Value> memrefs">
+  ];
+
+  // TODO: canonicalizations related to memrefs.
+  let hasCanonicalizer = 0;
 }
 
 #endif // AFFINE_OPS
