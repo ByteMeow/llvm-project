@@ -1605,21 +1605,32 @@ OpFoldResult RankOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verify(ReturnOp op) {
-  auto function = cast<FuncOp>(op.getParentOp());
+  auto *parentOp = op.getParentOp();
+  if (!parentOp)
+    return op.emitOpError("has no parent op");
 
-  // The operand number and types must match the function signature.
-  const auto &results = function.getType().getResults();
-  if (op.getNumOperands() != results.size())
+  // The operand count and types must be consistent with the parent op. When the
+  // parent is a FuncOp (which is declarative), check against its return types;
+  // for the rest, check again the number of actual SSA results.
+  // TODO: create an op interface for declarative func like ops instead of
+  // treating just the FuncOp specially.
+  ArrayRef<Type> retTypes;
+  if (auto funcOp = dyn_cast<FuncOp>(parentOp))
+    retTypes = funcOp.getType().getResults();
+  else
+    retTypes = parentOp->getResultTypes();
+
+  if (op.getNumOperands() != retTypes.size())
     return op.emitOpError("has ")
            << op.getNumOperands()
-           << " operands, but enclosing function returns " << results.size();
+           << " operands, but enclosing function returns " << retTypes.size();
 
-  for (unsigned i = 0, e = results.size(); i != e; ++i)
-    if (op.getOperand(i).getType() != results[i])
+  for (unsigned i = 0, e = retTypes.size(); i != e; ++i)
+    if (op.getOperand(i).getType() != retTypes[i])
       return op.emitError()
              << "type of return operand " << i << " ("
              << op.getOperand(i).getType()
-             << ") doesn't match function result type (" << results[i] << ")";
+             << ") doesn't match function result type (" << retTypes[i] << ")";
 
   return success();
 }

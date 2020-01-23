@@ -551,6 +551,15 @@ func @load_store_prefetch(memref<4x4xi32>, index) {
   return
 }
 
+// CHECK-LABEL: func @return_in_op_with_region
+func @return_in_op_with_region() {
+  "foo.region"() ({
+    %c9 = constant 9 : i32
+    return %c9 : i32
+  }): () -> (i32)
+  return
+}
+
 // Test with zero-dimensional operands using no index in load/store.
 // CHECK-LABEL: func @zero_dim_no_idx
 func @zero_dim_no_idx(%arg0 : memref<i32>, %arg1 : memref<i32>, %arg2 : memref<i32>) {
