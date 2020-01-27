@@ -825,6 +825,41 @@ def IndexCastOp : CastOp<"index_cast">, Arguments<(ins AnyType:$in)> {
   let hasFolder = 0;
 }
 
+def InlinedCallOp : Std_Op<"inlined_call"> {
+  let summary = "inlined_call operation";
+  let description = [{
+      The inlined_call operation executes the region held exactly once with
+      control returning to right after the op. The op cannot have any operands,
+      nor does its region have any arguments. All SSA values that dominate the
+      op can be accessed inside. Its region's blocks can have terminators the
+      same way as MLIR functions (FuncOp) can. Control from any return ops
+      from the top level of its region returns to right after the inlined_call
+      op. The results of the inlined_call op match 1:1 with the return values
+      from its region's blocks;
+
+      Ex:
+
+      loop.for %i = 0 to 128 {
+        %y = std.inlined_call -> i32 {
+          %x = load %A[%i] : memref<128xi32>
+          return %x : i32
+        }
+      }
+  }];
+
+  let results = (outs Variadic<AnyType>);
+
+  let regions = (region AnyRegion:$region);
+
+  let verifier = ?;
+
+  // TODO: Single block inlined_call ops can be readily inlined irrespective of
+  // which op is a parent. Add a fold for this.
+  // TODO: If the parent is a Func op (which would be the case if all
+  // other ops are from the std dialect), the inliner could be used to inline.
+  let hasCanonicalizer = 0;
+}
+
 def FPExtOp : CastOp<"fpext">, Arguments<(ins AnyType:$in)> {
   let summary = "cast from floating-point to wider floating-point";
   let description = [{
@@ -1099,14 +1134,19 @@ def UnsignedRemIOp : IntArithmeticOp<"remi_unsigned"> {
 def ReturnOp : Std_Op<"return", [Terminator]> {
   let summary = "return operation";
   let description = [{
-    The "return" operation represents a return operation within a function.
-    The operation takes variable number of operands and produces no results.
-    The operand number and types must match the signature of the function
-    that contains the operation. For example:
+    The `return` terminator operation, when enclosed immediately by a function,
+    represents the completion of that function and produces its result values.
+    The count and types of the operands must match the result types of the
+    enclosing function. It is valid for multiple blocks in a single function to
+    return. In the case that the `return` op's parent is not a function op, the
+    `return` represents a transfer of control to its parent, whose semantics
+    determine where control flows next, and whose result values match the values
+    returned.
 
-      func @foo() : (i32, f8) {
-      ...
-      return %0, %1 : i32, f8
+      func @foo() : () -> (i32, f32) {
+        ...
+        return %0, %1 : i32, f32
+      }
   }];
 
   let arguments = (ins Variadic<AnyType>:$operands);
