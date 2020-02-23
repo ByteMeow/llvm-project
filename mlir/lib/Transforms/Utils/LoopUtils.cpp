@@ -2054,7 +2054,7 @@ uint64_t mlir::affineDataCopyGenerate(Block::iterator begin,
   if (totalCopyBuffersSizeInBytes > copyOptions.fastMemCapacityBytes) {
     StringRef str = "Total size of all copy buffers' for this block "
                     "exceeds fast memory capacity\n";
-    block->getParentOp()->emitError(str);
+    block->getParentOp()->emitWarning(str);
   }
 
   if (fastBufs) {
