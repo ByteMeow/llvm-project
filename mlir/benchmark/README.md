@@ -46,6 +46,5 @@ mlir::interchange) is left as an exercise to the reader. :)
 ```
 $ mlir-opt -affine-vectorize -affine-scalrep benchmark/dgemm-tiled-benchmark.mlir
 ```
-
-Please email Uday Bondhugula <uday@polymagelabs.com> if you find something
-unexpected that is unrelated to MLIR upstream.
+If you find something unexpected that is unrelated to MLIR upstream, please file
+an issue [here](https://github.com/bondhugula/llvm-project/issues).
