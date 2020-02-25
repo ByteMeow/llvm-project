@@ -1000,11 +1000,15 @@ uses 12 vector registers for %C instead of the under utilization of 8 earlier
 ```
 
 When one chooses M_R = 3 and N_R = 16, it leads to 3 * 16 /4 = 12 256-bit vector
-registers for the output values. The BLIS provided kernels for Haswell otherwise
-include 6\*8, 8\*6, 4\*12, 12\*4 -- they too use (2\*6 =) 12 registers, but
+registers for the output values, 3 values for the LHS, and 1 for the RHS, which
+amounts to 12 + 3 + 1 = 16 registers --- exactly the number of VEX encodable
+registers for AVX-2. The
+BLIS provided kernels for Haswell otherwise
+include 6\*8, 8\*6, 4\*12, 12\*4 -- they too use (2\*6 =) 12 registers for the
+output, but
 these options differ in how much register reuse is relatively exploited along
 the two dimensions and how big the L1 resident buffer for the RHS is. Let's
-executre the M_R = 3, N_R = 16 configuration.
+execute the M_R = 3, N_R = 16 configuration.
 ```shell
 # M_C = 180 : i32, K_C = 480 : i32, M_R = 3, N_R = 16 : i32, K_U = 4 : i32
 $ mlir-opt -hopt -hopt-vect -hopt-copy -hopt-unroll -hopt-scalrep -convert-linalg-to-loops -lower-affine -convert-std-to-llvm hopt.mlir | mlir-cpu-runner -O3 -e main -reps=3 -entry-point-result=void -shared-libs=lib/libmlir_runner_utils.so > /dev/null
@@ -1044,45 +1048,56 @@ have a continuous sequence of VFMA instructions on 256-bit AVX registers which
 are named %ymm[0-15].
 
 ```
-     e1d:       c4 62 7d 19 7c c5 f8            vbroadcastsd    -8(%rbp,%rax,8), %ymm15
-     e24:       c4 42 85 a8 f3                  vfmadd213pd     %ymm11, %ymm15, %ymm14
-     e29:       c4 41 7d 28 98 40 ff ff ff      vmovapd -192(%r8), %ymm11
-     e32:       c4 c2 9d b8 d3                  vfmadd231pd     %ymm11, %ymm12, %ymm2
-     e37:       c4 c2 95 b8 db                  vfmadd231pd     %ymm11, %ymm13, %ymm3
-     e3c:       c4 c2 85 b8 e3                  vfmadd231pd     %ymm11, %ymm15, %ymm4
-     e41:       c4 41 7d 28 98 60 ff ff ff      vmovapd -160(%r8), %ymm11
-     e4a:       c4 c2 9d b8 eb                  vfmadd231pd     %ymm11, %ymm12, %ymm5
-     e4f:       c4 c2 95 b8 f3                  vfmadd231pd     %ymm11, %ymm13, %ymm6
-     e54:       c4 c2 85 b8 fb                  vfmadd231pd     %ymm11, %ymm15, %ymm7
-     e59:       c4 41 7d 28 58 80               vmovapd -128(%r8), %ymm11
-     e5f:       c4 42 a5 a8 e1                  vfmadd213pd     %ymm9, %ymm11, %ymm12
-     e64:       c4 42 a5 a8 ea                  vfmadd213pd     %ymm10, %ymm11, %ymm13
-     e69:       c4 42 85 b8 c3                  vfmadd231pd     %ymm11, %ymm15, %ymm8
-     e6e:       c4 62 7d 19 94 c5 00 e2 ff ff   vbroadcastsd    -7680(%rbp,%rax,8), %ymm10
-     e78:       c4 41 7d 28 48 a0               vmovapd -96(%r8), %ymm9
-     e7e:       c4 c2 b5 b8 c2                  vfmadd231pd     %ymm10, %ymm9, %ymm0
-     e83:       c4 62 7d 19 9c c5 00 f1 ff ff   vbroadcastsd    -3840(%rbp,%rax,8), %ymm11
-     e8d:       c4 c2 b5 b8 cb                  vfmadd231pd     %ymm11, %ymm9, %ymm1
-     e92:       c4 62 7d 19 7c c5 00            vbroadcastsd    (%rbp,%rax,8), %ymm15
-     e99:       c4 42 85 a8 ce                  vfmadd213pd     %ymm14, %ymm15, %ymm9
-     e9e:       c4 41 7d 28 70 c0               vmovapd -64(%r8), %ymm14
-     ea4:       c4 c2 ad b8 d6                  vfmadd231pd     %ymm14, %ymm10, %ymm2
-     ea9:       c4 c2 a5 b8 de                  vfmadd231pd     %ymm14, %ymm11, %ymm3
-     eae:       c4 c2 85 b8 e6                  vfmadd231pd     %ymm14, %ymm15, %ymm4
-     eb3:       c4 41 7d 28 70 e0               vmovapd -32(%r8), %ymm14
-     eb9:       c4 c2 ad b8 ee                  vfmadd231pd     %ymm14, %ymm10, %ymm5
-     ebe:       c4 c2 a5 b8 f6                  vfmadd231pd     %ymm14, %ymm11, %ymm6
-     ec3:       c4 c2 85 b8 fe                  vfmadd231pd     %ymm14, %ymm15, %ymm7
-     ec8:       c4 41 7d 28 30                  vmovapd (%r8), %ymm14
-     ecd:       c4 42 8d a8 d4                  vfmadd213pd     %ymm12, %ymm14, %ymm10
-     ed2:       c4 42 8d a8 dd                  vfmadd213pd     %ymm13, %ymm14, %ymm11
-     ed7:       c4 42 85 b8 c6                  vfmadd231pd     %ymm14, %ymm15, %ymm8
+                           # =>        This Inner Loop Header: Depth=5
+  vbroadcastsd    -7704(%rbx), %ymm12
+  vmovapd -480(%r13), %ymm14
+  vfmadd231pd     %ymm12, %ymm14, %ymm0 # ymm0 = (ymm14 * ymm12) + ymm0
+  vbroadcastsd    -3864(%rbx), %ymm13
+  vfmadd231pd     %ymm13, %ymm14, %ymm1 # ymm1 = (ymm14 * ymm13) + ymm1
+  vbroadcastsd    -24(%rbx), %ymm15
+  vfmadd213pd     %ymm10, %ymm15, %ymm14 # ymm14 = (ymm15 * ymm14) + ymm10
+  vmovapd -448(%r13), %ymm10
+  vfmadd231pd     %ymm10, %ymm12, %ymm2 # ymm2 = (ymm12 * ymm10) + ymm2
+  vfmadd231pd     %ymm10, %ymm13, %ymm3 # ymm3 = (ymm13 * ymm10) + ymm3
+  vfmadd231pd     %ymm10, %ymm15, %ymm4 # ymm4 = (ymm15 * ymm10) + ymm4
+  vmovapd -416(%r13), %ymm10
+  vfmadd231pd     %ymm10, %ymm12, %ymm5 # ymm5 = (ymm12 * ymm10) + ymm5
+  vfmadd231pd     %ymm10, %ymm13, %ymm6 # ymm6 = (ymm13 * ymm10) + ymm6
+  vfmadd231pd     %ymm10, %ymm15, %ymm7 # ymm7 = (ymm15 * ymm10) + ymm7
+  vmovapd -384(%r13), %ymm10
+  vfmadd213pd     %ymm9, %ymm10, %ymm12 # ymm12 = (ymm10 * ymm12) + ymm9
+  vfmadd213pd     %ymm11, %ymm10, %ymm13 # ymm13 = (ymm10 * ymm13) + ymm11
+  vfmadd231pd     %ymm10, %ymm15, %ymm8 # ymm8 = (ymm15 * ymm10) + ymm8
+  vbroadcastsd    -7696(%rbx), %ymm9
+  vmovapd -352(%r13), %ymm11
+  vfmadd231pd     %ymm9, %ymm11, %ymm0 # ymm0 = (ymm11 * ymm9) + ymm0
+  vbroadcastsd    -3856(%rbx), %ymm10
+  vfmadd231pd     %ymm10, %ymm11, %ymm1 # ymm1 = (ymm11 * ymm10) + ymm1
+  vbroadcastsd    -16(%rbx), %ymm15
+  vfmadd213pd     %ymm14, %ymm15, %ymm11 # ymm11 = (ymm15 * ymm11) + ymm14
+  vmovapd -320(%r13), %ymm14
+  vfmadd231pd     %ymm14, %ymm9, %ymm2 # ymm2 = (ymm9 * ymm14) + ymm2
+  vfmadd231pd     %ymm14, %ymm10, %ymm3 # ymm3 = (ymm10 * ymm14) + ymm3
+  vfmadd231pd     %ymm14, %ymm15, %ymm4 # ymm4 = (ymm15 * ymm14) + ymm4
+  vmovapd -288(%r13), %ymm14
+  vfmadd231pd     %ymm14, %ymm9, %ymm5 # ymm5 = (ymm9 * ymm14) + ymm5
+  vfmadd231pd     %ymm14, %ymm10, %ymm6 # ymm6 = (ymm10 * ymm14) + ymm6
+  vfmadd231pd     %ymm14, %ymm15, %ymm7 # ymm7 = (ymm15 * ymm14) + ymm7
+  vmovapd -256(%r13), %ymm14
+  vfmadd213pd     %ymm12, %ymm14, %ymm9 # ymm9 = (ymm14 * ymm9) + ymm12
+  vfmadd213pd     %ymm13, %ymm14, %ymm10 # ymm10 = (ymm14 * ymm10) + ymm13
+  vfmadd231pd     %ymm14, %ymm15, %ymm8 # ymm8 = (ymm15 * ymm14) + ymm8
+  vbroadcastsd	-7688(%rbx), %ymm12
+  vmovapd	-224(%r13), %ymm14
+  ...
 ```
 
 This looks as good as we may expect! The output matrix values are always in
-registers (no spilling). There are aligned loads for the LHS and RHS with high
-reuse at regular intervals. The LHS is being broadcast/splat (vbroadcastsd) and
-the RHS is being moved in via aligned vector loads.
+registers (no spilling). LHS and RHS values have the intended amount of reuse in
+registers. The LHS is loaded in once via broadcast/splat
+(vbroadcastsd), and reused along the j register tile dimension, while the RHS is
+moved in via aligned vector loads and reused along the i register tile
+dimension.
 
 ```shell
 # Let's look at the benefit of packing in isolation on the best code we have:
@@ -1313,10 +1328,14 @@ Compilation time: 0.039474s
 ```
 
 There is nearly no difference when comparing the hybrid MLIR and BLIS micro
-kernel with the best MLIR version we had. However, the more aggressive M_R = 6,
-N_R = 8, which we wanted for 1:1 comparison shows a performance drop of 35%.
-The 6x8 should have still met the register budget and led to no spilling, but it
-looks like it made the LLVM backend spill.  The assembly dump confirms this
+kernel with the best MLIR version we had. For a given M_R x N_R register tile
+with schedule we have been using, the register requirement (assuming the
+instruction scheduler isn't doing any non-trivial reordering) would be
+M_R\*N_R/4 + M_R + 1 (the division by four is for the vector width). With M_R =
+3, N_R = 16, this requirement would exactly be 16, which is the number of %ymm
+registers we have! Using M_R = 6, N_R = 8 with our code (as opposed to with the
+BLIS micro-kernel), the requirement goes up to 6\*2 + 6 + 1 = 19
+registers, and leads to a spill. The assembly dump confirms this
 (notice the vmovupd stores in between the FMAs, which didn't exist earlier).
 Also, the intuitively sub-optimal sizes of M_R = 4, N_R = 8 provide better
 performance than the tighter M_R = 6, M_R = 8, indicating the cliff associated
@@ -1336,6 +1355,32 @@ c4 62 95 b8 f0                              vfmadd231pd     %ymm0, %ymm13, %ymm1
 13a9:       c5 7d 11 a4 24 e0 01 00 00      vmovupd %ymm12, 480(%rsp) 13b2:
             c4 c2 95 b8 e4                  vfmadd231pd     %ymm12, %ymm13, %ymm4
 ```
+
+However, M_R = 6, N_R = 8 could be made to fit in the register budget by using a
+different permutation of instructions for the innermost loop body, i.e., with
+a register tile whose intra-tile loops have been permuted before the unrolling
+was performed. In such a case, the register requirement would be: M_R * N_R/4 +
+N_R/4 + 1 = 15! The schedule to be used to realize that would be:
+
+```
+(d0, d1, d2) -> (d2 floordiv 480, d0 floordiv 330, d1 floordiv 8, d0 floordiv 6,
+d2, d0, d1)
+```
+Notice the flip (..., d0, d1) instead of (..., d1, d0). This also means that the
+LLVM backend isn't going to automatically do a complex permutation on the
+innermost body that changes live ranges, reducing register requirements to
+fit within the budget and thereby avoiding a spill. Using the above schedule
+leads to no spill and the code performs at about 5\% slower though than M_R = 3,
+N_R = 16. It is thus also important to get the right permutation for the
+unrolled register tile (at the time of selecting the loop transformation) --- so
+that the matrix values with longer reuse distances for that intra register tile
+permutation (LHS values in the case of (d1, d0) and RHS values in the case of
+(d0, d1)) do not cause a spill. Alternatively, this problem could be viewed as
+one that performs the unroll-and-jam for i, j in the right order. The register
+requirement in the context of this
+"known" computation and its interaction with the intra-tile loop permutation and
+register tile sizes (M_R, N_R) are pretty easy to capture at a high level to
+make sure even a simple register allocator does the right thing.
 
 Overall, we conclude here that the kind of code we could get automatically
 is clearly on par or close to what was achieved with expert written assembly.
@@ -1448,9 +1493,9 @@ trunk](https://github.com/llvm/llvm-project).  There are some major features tha
 are pending upstream integration (memref_shape_cast op, alloca op, scalar
 replacement, a new vectorization pass/utility, and support for a few packing
 options), but these are available in the *hop* branch at
-https://github.com/bondhugula/llvm-project.  Please see this
-[README](https://github.com/bondhugula/llvm-project/blob/hop/mlir/benchmark/README.md) there
-to run most of the experiments reported herein.
+https://github.com/bondhugula/llvm-project/tree/hop.  Please see this
+[README](https://github.com/bondhugula/llvm-project/blob/hop/mlir/benchmark/README.md)
+there to run most of the experiments reported herein.
 
 Software versions and setup: Fedora Linux 30 running kernel
 5.3.6-200.fc30.x86_64, MLIR used with LLVM git 52bfa73af84 from Oct 2019, BLIS
