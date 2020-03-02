@@ -13,7 +13,7 @@ by-product, this document is also meant to show the role compiler infrastructure
 can play in generating code that is competitive with highly tuned manually
 developed libraries in a more modular, reusable, and automatable way.
 
-## Background, Motivation, and Setup
+## Introduction, Motivation, and Setup
 
 It is well-known that the computationally demanding routines driving the
 state-of-the-art in domains such as dense linear algebra and deep learning are
@@ -41,12 +41,12 @@ OpenBLAS/BLIS' optimization approach in a compiler-oriented way using MLIR.
 ### Setup
 
 We are going to be using an Intel Skylake-based high-end desktop/workstation
-processor for all experimentation. The processor is an *[Intel(R) Core(TM)
+processor for all experimentation. The processor is an [Intel(R) Core(TM)
 i7-8700K CPU @
-3.70GHz](https://ark.intel.com/content/www/us/en/ark/products/126684/intel-core-i7-8700k-processor-12m-cache-up-to-4-70-ghz.html)*,
+3.70GHz](https://ark.intel.com/content/www/us/en/ark/products/126684/intel-core-i7-8700k-processor-12m-cache-up-to-4-70-ghz.html),
 which is actually based on [Coffee
 Lake](https://en.wikichip.org/wiki/intel/microarchitectures/coffee_lake), a
-process refinement of Skylake, and thus the same core/performance
+process refinement of Skylake, and thus with the same core/performance
 characteristics.  Note that although this is based on the Skylake
 microarchitecture, it's not a SkyLake-X: as such, its vectors are not AVX-512
 but just AVX-2 (256-bit). It has a 32 KiB L1 data cache and a 256 KiB L2 unified
@@ -150,7 +150,7 @@ the above experimentation in terms of performing warmup runs, taking an average
 across repetitions etc., but our goal is to just get a reasonably accurate
 picture for now.]
 
-## Using MLIR
+## Using MLIR to Optimize GEMM
 
 There is currently no C/C++ or another frontend that emits MLIR. The way to get
 something in MLIR run on CPUs is through *mlir-cpu-runner* which can take MLIR
@@ -959,13 +959,13 @@ Note that we'd have a "padding" worth 2 elements (256 % 6) at the end of each
 row that can never be accessed via this memref while staying in bounds. Another
 way to write this is:
 ```mlir
-memref<64x256xf64, (d0, d1) -> (d0 * 258 + d1)
+memref<64x256xf64, (d0, d1) -> (d0 * 258 + d1)>
 ```
 
 A memref with access strides say 128, 2 (for major, minor resp.) in a larger
 underlying buffer can be expressed for example as:
 ```mlir
-memref<126x100xf32, (d0, d1) -> (d0 * 128 + d1 * 2).
+memref<126x100xf32, (d0, d1) -> (d0 * 128 + d1 * 2)>.
 ```
 
 More examples can be found [here](https://github.com/llvm/llvm-project/tree/master/mlir/test/Transforms/memref-normalize.mlir).
@@ -1488,20 +1488,31 @@ like to generalize this approach beyond the domain considered here.
 
 ## Reproducing these Results
 
-A good part of this tutorial can be reproduced with [MLIR
-trunk](https://github.com/llvm/llvm-project).  There are some major features that
-are pending upstream integration (memref_shape_cast op, alloca op, scalar
-replacement, a new vectorization pass/utility, and support for a few packing
-options), but these are available in the *hop* branch at
-https://github.com/bondhugula/llvm-project/tree/hop.  Please see this
-[README](https://github.com/bondhugula/llvm-project/blob/hop/mlir/benchmark/README.md)
-there to run most of the experiments reported herein.
+**Software setup:** Fedora Linux 30 running kernel
+5.3.6-200.fc30.x86_64, BLIS version 0.6.0-40-gf4f5170f, MKL version 2019.4.243,
+OpenBLAS 0.3.7-1.fc30.x86\_64, and Pluto git 0.11.4-903-g7f21ab57.  *cpupower*
+was used to set the frequency governor to `performance'.
 
-Software versions and setup: Fedora Linux 30 running kernel
-5.3.6-200.fc30.x86_64, MLIR used with LLVM git 52bfa73af84 from Oct 2019, BLIS
-version 0.6.0-40-gf4f5170f, MKL version 2019.4.243, OpenBLAS
-0.3.7-1.fc30.x86_64, and Pluto git 0.11.4-903-g7f21ab57. *cpupower* was used to
-set the frequency governor to 'performance'.
+A good part of the experiments presented in this article can be reproduced with
+MLIR trunk. There are major features though that are pending upstream
+integration (*memref_shape_cast* op, *alloca* op, scalar replacement, a new
+vectorization pass/utility, and support for a few packing options), but these
+are available in the *hop* branch
+  [here](https://github.com/bondhugula/llvm-project/tree/hop), which
+is the
+recommended way of reproducing results presented herein as is. Please see
+this
+[README](https://github.com/bondhugula/llvm-project/blob/hop/mlir/benchmark/README.md)
+to run most of the experiments.
+
+The *hop* branch however is not intended to be continuously kept in sync
+with changing upstream MLIR development --- so that the examples,
+IR and results presented herein remain valid. On the other hand, the
+[MLIRX](https://github.com/polymage-labs/mlirx)
+repository provides all of the features presented here while being maintained to
+be in sync with upstream MLIR development. If the reader's objective is to build
+upon the augmented IR infrastructure as opposed to just trying to reproduce
+things, MLIRX is recommended.
 
 ## References
 
