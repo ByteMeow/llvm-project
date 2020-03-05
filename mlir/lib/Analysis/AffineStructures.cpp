@@ -1573,7 +1573,8 @@ std::pair<AffineMap, AffineMap> FlatAffineConstraints::getLowerAndUpperBound(
     // - 1.
     addCoeffs(ineq, lb);
     std::transform(lb.begin(), lb.end(), lb.begin(), std::negate<int64_t>());
-    auto expr = mlir::toAffineExpr(lb, dimCount, symCount, localExprs, context);
+    auto expr =
+        getAffineExprFromFlatForm(lb, dimCount, symCount, localExprs, context);
     // expr ceildiv divisor is (expr + divisor - 1) floordiv divisor
     int64_t divisor = std::abs(ineq[pos + offset]);
     expr = (expr + divisor  - 1).floorDiv(divisor);
@@ -1587,7 +1588,8 @@ std::pair<AffineMap, AffineMap> FlatAffineConstraints::getLowerAndUpperBound(
     auto ineq = getInequality(idx);
     // Extract the upper bound (in terms of other coeff's + const).
     addCoeffs(ineq, ub);
-    auto expr = mlir::toAffineExpr(ub, dimCount, symCount, localExprs, context);
+    auto expr =
+        getAffineExprFromFlatForm(ub, dimCount, symCount, localExprs, context);
     expr = expr.floorDiv(std::abs(ineq[pos + offset]));
     // Upper bound is exclusive.
     ubExprs.push_back(expr + 1);
@@ -1602,12 +1604,14 @@ std::pair<AffineMap, AffineMap> FlatAffineConstraints::getLowerAndUpperBound(
       std::transform(b.begin(), b.end(), b.begin(), std::negate<int64_t>());
 
     // Extract the upper bound (in terms of other coeff's + const).
-    auto expr = mlir::toAffineExpr(b, dimCount, symCount, localExprs, context);
+    auto expr =
+        getAffineExprFromFlatForm(b, dimCount, symCount, localExprs, context);
     expr = expr.floorDiv(std::abs(eq[pos + offset]));
     // Upper bound is exclusive.
     ubExprs.push_back(expr + 1);
     // Lower bound.
-    expr = mlir::toAffineExpr(b, dimCount, symCount, localExprs, context);
+    expr =
+        getAffineExprFromFlatForm(b, dimCount, symCount, localExprs, context);
     expr = expr.ceilDiv(std::abs(eq[pos + offset]));
     lbExprs.push_back(expr);
   }
