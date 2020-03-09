@@ -1158,3 +1158,14 @@ func @assume_alignment(%0: memref<4x4xf16>) {
   std.assume_alignment %0, 0 : memref<4x4xf16>
   return
 }
+
+// -----
+
+func @execute_region() {
+  // expected-error @+1 {{region cannot have any arguments}}
+  "std.execute_region"() ({
+  ^bb0(%i : i32):
+    return
+  }) : () -> ()
+  return
+}
